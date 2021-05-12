@@ -82,4 +82,5 @@ if __name__ == "__main__":
   url = 'https://www.foodnetwork.com/recipes/food-network-kitchen/black-eyed-pea-soup-3361891'
 
   clean_recipe = main(url)
+  print(clean_recipe.url, '\n')
   print_full_recipe(clean_recipe.info)

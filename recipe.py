@@ -33,7 +33,7 @@ class CleanRecipe_JSON:
     if 'allrecipes' in self.url:
       json = json[1]
 
-    _dict['image'] = json['image']#['url']
+    _dict['image'] = json['image']
     _dict['name'] = json['name']
     _dict['time'] = json['totalTime']
     _dict['servings'] = json['recipeYield']
@@ -51,6 +51,14 @@ class CleanRecipe_JSON:
     
     return data
 
+
+  def clean_time(self):
+    data = self.info['time']
+
+    pattern = r'(\d*H)*(\d*M)'
+    match = re.search(pattern, data)
+
+    return match[0]
     
 
   def clean_instructions(self):
@@ -86,14 +94,6 @@ class CleanRecipe_JSON:
       print('data is not dict')
 
 
-  def clean_time(self):
-    data = self.info['time']
-
-    pattern = r'(\d*H)*(\d*M)'
-    match = re.search(pattern, data)
-
-    return match[0]
-
 
 
 class CleanRecipe_HTML:
@@ -109,6 +109,22 @@ class CleanRecipe_HTML:
     self.info = {}
 
     self.convert_html_to_dict(self.info)
+
+  
+  def convert_html_to_dict(self, _dict):
+    image_tag = ('img', {'class': 'a-Image--Food'})
+    name_tag = ('span', {'class': 'o-AssetTitle__a-HeadlineText'})
+    time_tag = ('span', {'class': 'o-RecipeInfo__a-Description m-RecipeInfo__a-Description--Total'})
+    yield_tag = ('div', {'class': 'm-RecipeBody'})
+    ingredients_tag = ('div', {'class': 'o-Ingredients__m-Body'})
+    instructions_tag = ('div', {'class': 'o-Method__m-Body'})
+
+    _dict['image'] = self.html_image_to_string(image_tag)
+    _dict['name'] = self.html_name_to_string(name_tag)
+    _dict['time'] = self.html_time_to_string(time_tag)
+    _dict['servings'] = self.html_yield_to_string(yield_tag)
+    _dict['ingredients'] = self.html_ingredients_to_list(ingredients_tag)
+    _dict['instructions'] = self.html_instructions_to_list(instructions_tag)
 
 
   def html_image_to_string(self, tag=tuple): #tuple = ('tag name', {attribute: value})
@@ -151,19 +167,3 @@ class CleanRecipe_HTML:
       if child.name == 'p':
         _list.append(child.text)
     return _list
-
-
-  def convert_html_to_dict(self, _dict):
-    image_tag = ('img', {'class': 'a-Image--Food'})
-    name_tag = ('span', {'class': 'o-AssetTitle__a-HeadlineText'})
-    time_tag = ('span', {'class': 'o-RecipeInfo__a-Description m-RecipeInfo__a-Description--Total'})
-    yield_tag = ('div', {'class': 'm-RecipeBody'})
-    ingredients_tag = ('div', {'class': 'o-Ingredients__m-Body'})
-    instructions_tag = ('div', {'class': 'o-Method__m-Body'})
-
-    _dict['image'] = self.html_image_to_string(image_tag)
-    _dict['name'] = self.html_name_to_string(name_tag)
-    _dict['time'] = self.html_time_to_string(time_tag)
-    _dict['servings'] = self.html_yield_to_string(yield_tag)
-    _dict['ingredients'] = self.html_ingredients_to_list(ingredients_tag)
-    _dict['instructions'] = self.html_instructions_to_list(instructions_tag)
