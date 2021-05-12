@@ -4,43 +4,111 @@ import json
 import html
 import re
 
-site_styles = {
-  'json':['allrecipes.com', 'tasteofhome.com'],
-  'printable':['foodnetwork.com']
-}
 
-class CleanRecipe:
+
+class CleanRecipe_JSON:
   def __init__(self, url):
     self.url = url
-    self.style = self.match_site_style()
+    response = requests.get(self.url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.78 Safari/537.36"})
+    self.soup = BeautifulSoup(response.content, "html.parser")
+    
+    raw_json = self.extract_json_from_html() 
+    self.info = {}
+    self.convert_json_to_dict(raw_json, self.info)
 
-    if self.style == 'printable':
-      if 'foodnetwork.com' in self.url:
-        self.url += '.recipePrint'
+    self.info['image'] = self.clean_image()
+    self.info['time'] = self.clean_time()
+    self.info['instructions'] = self.clean_instructions()
+    self.info['nutrition'] = self.clean_nutrition()
+
+
+  def extract_json_from_html(self):
+    result = self.soup .find('script', {'type': 'application/ld+json'}).string
+    raw_json = json.loads(html.unescape(result))
+
+    return raw_json
+
+
+  def convert_json_to_dict(self, json, _dict):
+    if 'allrecipes' in self.url:
+      json = json[1]
+
+    _dict['image'] = json['image']#['url']
+    _dict['name'] = json['name']
+    _dict['time'] = json['totalTime']
+    _dict['servings'] = json['recipeYield']
+    _dict['ingredients'] = json['recipeIngredient']
+    _dict['instructions'] = json['recipeInstructions']
+    _dict['nutrition'] = json['nutrition']
+
+
+  def clean_image(self):
+    data = self.info['image']  
+    if type(data) == list:
+      return data[0]
+    elif type(data) == dict:
+      return data['url']
+    
+    return data
+
+    
+
+  def clean_instructions(self):
+    data = self.info['instructions']
+    instructions = []
+
+    if type(data) == list:
+      if 'allrecipes' in self.url:
+        for item in data:
+          instructions.append(item['text'].strip())
+    else:
+      if 'tasteofhome' in self.url:
+        instructions = [_.strip() for _ in data.split(' ,')]
+    
+    return instructions
+
+
+  def clean_nutrition(self):
+    data = self.info['nutrition']
+    nutrition = []
+    if type(data) == dict:
+      for key in data:
+        if data[key] is not None and key.isalpha():
+          if 'Content' in key:
+            item = key.replace('Content','').strip()
+          else:
+            item = key.strip()
+          nutrition.append((item, data[key]))
+      
+      return nutrition
+    
+    else:
+      print('data is not dict')
+
+
+  def clean_time(self):
+    data = self.info['time']
+
+    pattern = r'(\d*H)*(\d*M)'
+    match = re.search(pattern, data)
+
+    return match[0]
+
+
+
+class CleanRecipe_HTML:
+  def __init__(self, url):
+    self.url = url
+
+    if 'foodnetwork.com' in self.url:
+      self.url += '.recipePrint'
 
     response = requests.get(self.url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.78 Safari/537.36"})
     self.soup = BeautifulSoup(response.content, "html.parser")
 
-    self.recipe = {}
+    self.info = {}
 
-    if self.style == 'json':
-      raw_json = self.extract_json_from_html() 
-      self.convert_json_to_dict(raw_json, self.recipe)
-
-      self.recipe['time'] = self.clean_time()
-      self.recipe['instructions'] = self.clean_instructions()
-      self.recipe['nutrition'] = self.clean_nutrition()
-
-    elif self.style == 'printable':
-      self.convert_html_to_dict(self.recipe)
-
-
-  def match_site_style(self):
-    pattern = r'www.(\S*.com)/'
-    match = re.search(pattern, self.url)[1]
-    style = [k for k,v in site_styles.items() if match in v][0]
-
-    return style
+    self.convert_html_to_dict(self.info)
 
 
   def html_image_to_string(self, tag=tuple): #tuple = ('tag name', {attribute: value})
@@ -99,118 +167,3 @@ class CleanRecipe:
     _dict['servings'] = self.html_yield_to_string(yield_tag)
     _dict['ingredients'] = self.html_ingredients_to_list(ingredients_tag)
     _dict['instructions'] = self.html_instructions_to_list(instructions_tag)
-    
-
-  
-
-
-  def extract_json_from_html(self):
-    result = self.soup .find('script', {'type': 'application/ld+json'}).string
-    raw_json = json.loads(html.unescape(result))
-
-    return raw_json
-
-
-  def convert_json_to_dict(self, json, _dict):
-    if 'allrecipes' in self.url:
-      json = json[1]
-
-    _dict['image'] = json['image']['url']
-    _dict['name'] = json['name']
-    _dict['time'] = json['totalTime']
-    _dict['servings'] = json['recipeYield']
-    _dict['ingredients'] = json['recipeIngredient']
-    _dict['instructions'] = json['recipeInstructions']
-    _dict['nutrition'] = json['nutrition']
-    
-
-  def clean_instructions(self):
-    data = self.recipe['instructions']
-    instructions = []
-
-    if type(data) == list:
-      if 'allrecipes' in self.url:
-        for item in data:
-          instructions.append(item['text'].strip())
-    else:
-      if 'tasteofhome' in self.url:
-        instructions = [_.strip() for _ in data.split(' ,')]
-    
-    return instructions
-
-
-  def clean_nutrition(self):
-    data = self.recipe['nutrition']
-    nutrition = []
-    if type(data) == dict:
-      for key in data:
-        if data[key] is not None and key.isalpha():
-          if 'Content' in key:
-            item = key.replace('Content','').strip()
-          else:
-            item = key.strip()
-          nutrition.append((item, data[key]))
-      
-      return nutrition
-    
-    else:
-      print('data is not dict')
-
-
-  def clean_time(self):
-    data = self.recipe['time']
-
-    pattern = r'(\d*H)*(\d*M)'
-    match = re.search(pattern, data)
-
-    return match[0]
-
-
-  def print_full_recipe(self):
-    if 'image' in self.recipe:
-      print(self.recipe['image'])
-    else:
-      print('No name data')
-
-    print('\n')
-
-    if 'name' in self.recipe:
-      print(self.recipe['name'])
-    else:
-      print('No name data')
-
-    print('\n')
-
-    if 'time' in self.recipe:
-      print(self.recipe['time'])
-    else:
-      print('No time data')
-
-    print('\n')
-
-    if 'servings' in self.recipe:
-      print(self.recipe['servings'])
-    else:
-      print('No servings data')
-
-    print('\n')
-
-    if 'ingredients' in self.recipe:
-      print(*self.recipe['ingredients'], sep='\n')
-    else:
-      print('No ingredients data')
-
-    print('\n')
-
-    if 'instructions' in self.recipe:  
-      print(*self.recipe['instructions'], sep='\n')
-    else:
-      print('No instructions data')
-    
-    print('\n')
-
-    if 'nutrition' in self.recipe:
-      for item, value in self.recipe['nutrition']:
-        print(item + ': ' + value)
-    else:
-      print('No nutrition data')
